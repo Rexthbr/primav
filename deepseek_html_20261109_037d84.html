@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Бесконечная карусель</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #ffffff;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #1e293b;
+    }
+
+    .carousel-wrap {
+        width: min(860px, 92vw);
+    }
+
+    .carousel {
+        position: relative;
+        width: 100%;
+        border-radius: 20px;
+        overflow: hidden;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.15);
+    }
+
+    .carousel-track {
+        display: flex;
+        transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+        will-change: transform;
+    }
+
+    .slide {
+        flex: 0 0 100%;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #f8fafc;
+        min-height: 300px;
+        padding: 1.25rem;
+    }
+
+    .slide img {
+        width: 100%;
+        height: auto;
+        max-height: 65vh;
+        object-fit: contain;
+        display: block;
+        border-radius: 12px;
+        user-select: none;
+        pointer-events: none;
+        background: #ffffff;
+    }
+
+    /* Кнопки навигации */
+    .carousel-btn {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 24px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        z-index: 10;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+        line-height: 1;
+    }
+
+    .carousel-btn:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+        transform: translateY(-50%) scale(1.08);
+        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+    }
+
+    .carousel-btn:active {
+        transform: translateY(-50%) scale(0.95);
+    }
+
+    .carousel-btn.prev { left: 14px; }
+    .carousel-btn.next { right: 14px; }
+
+    /* Индикаторы */
+    .carousel-indicators {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    .indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #cbd5e1;
+        border: none;
+        cursor: pointer;
+        transition: background 0.25s, transform 0.2s, width 0.25s;
+        padding: 0;
+    }
+
+    .indicator.active {
+        background: #2563eb;
+        width: 28px;
+        border-radius: 6px;
+    }
+
+    .indicator:hover { background: #94a3b8; }
+    .indicator.active:hover { background: #2563eb; }
+
+    /* Счётчик */
+    .carousel-counter {
+        display: flex;
+        justify-content: center;
+        margin-top: 10px;
+        font-size: 0.9rem;
+        color: #64748b;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .carousel-counter b { color: #0f172a; }
+
+    /* Ошибка загрузки */
+    .image-status {
+        color: #ef4444;
+        font-size: 0.9rem;
+        text-align: center;
+        padding: 1rem;
+        border: 1px dashed #fecaca;
+        border-radius: 12px;
+        background: #fef2f2;
+        width: 100%;
+    }
+
+    /* Плавное «нажатие» стрелками клавиатуры */
+    .carousel:focus-within {
+        outline: 2px solid #bfdbfe;
+        outline-offset: 4px;
+        border-radius: 24px;
+    }
+</style>
+</head>
+<body>
+
+<div class="carousel-wrap">
+    <div class="carousel" tabindex="0" id="carousel">
+        <div class="carousel-track" id="track"></div>
+        <button class="carousel-btn prev" id="prevBtn" aria-label="Предыдущий слайд">‹</button>
+        <button class="carousel-btn next" id="nextBtn" aria-label="Следующий слайд">›</button>
+    </div>
+
+    <div class="carousel-indicators" id="indicators"></div>
+    <div class="carousel-counter">
+        <span><b id="currentNum">1</b> / <span id="totalNum">5</span></span>
+    </div>
+</div>
+
+<script>
+(function () {
+    // Картинки .png в одной папке с HTML
+    const imageFiles = ['pr1.png', 'pr2.png', 'pr3.png', 'pr4.png', 'pr5.png'];
+    const total = imageFiles.length;
+
+    const track = document.getElementById('track');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const indicatorsContainer = document.getElementById('indicators');
+    const currentNumEl = document.getElementById('currentNum');
+    const totalNumEl = document.getElementById('totalNum');
+    const carouselEl = document.getElementById('carousel');
+
+    totalNumEl.textContent = total;
+
+    // 0 = клон последнего, 1..N = реальные, N+1 = клон первого
+    let currentIndex = 1;
+    let isAnimating = false;
+    let animationTimeout = null;
+
+    // ---- Создаём слайды с клонами ----
+    track.appendChild(createSlide(imageFiles[total - 1]));   // клон pr5
+    imageFiles.forEach(f => track.appendChild(createSlide(f))); // реальные
+    track.appendChild(createSlide(imageFiles[0]));           // клон pr1
+
+    // ---- Индикаторы ----
+    for (let i = 0; i < total; i++) {
+        const dot = document.createElement('button');
+        dot.classList.add('indicator');
+        dot.dataset.index = i;
+        dot.setAttribute('aria-label', `Слайд ${i + 1}`);
+        dot.addEventListener('click', () => goToRealIndex(i));
+        indicatorsContainer.appendChild(dot);
+    }
+
+    function createSlide(fileName) {
+        const slide = document.createElement('div');
+        slide.className = 'slide';
+
+        const img = document.createElement('img');
+        img.src = fileName;
+        img.alt = fileName.replace(/\.[^.]+$/, '');
+        img.loading = 'eager';
+        img.draggable = false;
+
+        img.addEventListener('error', () => {
+            const err = document.createElement('span');
+            err.className = 'image-status';
+            err.textContent = `⚠️ Не найдено: ${fileName}`;
+            slide.innerHTML = '';
+            slide.appendChild(err);
+        });
+
+        slide.appendChild(img);
+        return slide;
+    }
+
+    function updateTrack(animate = true) {
+        const slideWidth = track.children[0].getBoundingClientRect().width;
+        track.style.transition = animate
+            ? 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)'
+            : 'none';
+        track.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
+        updateIndicators();
+    }
+
+    function getRealIndex() {
+        if (currentIndex === 0) return total - 1;
+        if (currentIndex === total + 1) return 0;
+        return currentIndex - 1;
+    }
+
+    function updateIndicators() {
+        const realIndex = getRealIndex();
+        document.querySelectorAll('.indicator').forEach((dot, idx) => {
+            dot.classList.toggle('active', idx === realIndex);
+        });
+        currentNumEl.textContent = realIndex + 1;
+    }
+
+    function goToIndex(newIndex, animate = true) {
+        if (isAnimating || newIndex === currentIndex) return;
+        isAnimating = true;
+        currentIndex = newIndex;
+        updateTrack(animate);
+
+        if (!animate) { isAnimating = false; return; }
+
+        clearTimeout(animationTimeout);
+        animationTimeout = setTimeout(() => {
+            if (currentIndex === 0) currentIndex = total;
+            else if (currentIndex === total + 1) currentIndex = 1;
+
+            track.style.transition = 'none';
+            const slideWidth = track.children[0].getBoundingClientRect().width;
+            track.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
+            updateIndicators();
+
+            requestAnimationFrame(() => {
+                track.style.transition = 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)';
+                isAnimating = false;
+            });
+        }, 460);
+    }
+
+    function goToRealIndex(realIdx) { goToIndex(realIdx + 1); }
+    function nextSlide() { if (!isAnimating) goToIndex(currentIndex + 1); }
+    function prevSlide() { if (!isAnimating) goToIndex(currentIndex - 1); }
+
+    // ---- Инициализация ----
+    function init() {
+        requestAnimationFrame(() => {
+            currentIndex = 1;
+            updateTrack(false);
+        });
+        setTimeout(() => {
+            if (!isAnimating) {
+                const w = track.children[0]?.getBoundingClientRect().width || 0;
+                if (w === 0) updateTrack(false);
+            }
+        }, 200);
+    }
+
+    // ---- Управление ----
+    nextBtn.addEventListener('click', nextSlide);
+    prevBtn.addEventListener('click', prevSlide);
+
+    // Клавиатура: работает, когда карусель в фокусе (кликнули по ней)
+    carouselEl.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); prevSlide(); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); nextSlide(); }
+    });
+
+    // Свайпы для телефона
+    let touchStartX = 0;
+    let touchDeltaX = 0;
+    carouselEl.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchDeltaX = 0;
+    }, { passive: true });
+    carouselEl.addEventListener('touchmove', (e) => {
+        touchDeltaX = e.touches[0].clientX - touchStartX;
+    }, { passive: true });
+    carouselEl.addEventListener('touchend', () => {
+        if (Math.abs(touchDeltaX) > 50) {
+            touchDeltaX < 0 ? nextSlide() : prevSlide();
+        }
+        touchDeltaX = 0;
+    });
+
+    // Пересчёт при ресайзе
+    window.addEventListener('resize', () => {
+        if (isAnimating) return;
+        track.style.transition = 'none';
+        const slideWidth = track.children[0]?.getBoundingClientRect().width || 0;
+        track.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
+        requestAnimationFrame(() => {
+            track.style.transition = 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)';
+        });
+    });
+
+    init();
+})();
+</script>
+
+</body>
+</html>
